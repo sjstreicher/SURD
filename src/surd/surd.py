@@ -7,7 +7,7 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pymp
 
-from utils import it_tools as it
+from .utils import it_tools as it
 
 # Suppress all UserWarnings
 warnings.filterwarnings("ignore", category=UserWarning)

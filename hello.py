@@ -1,4 +1,4 @@
-from utils.surd import surd
+from surd import surd
 
 
 def main():
