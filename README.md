@@ -31,6 +31,8 @@ SURD is designed to operate efficiently on standard computing systems. However, 
 
 ## Getting started
 
+### Conda
+
 After cloning the repository, you can set up the environment needed to run the scripts successfully by following the instructions below. You can create an environment using `conda` with all the required packages by running:
 
 ```sh
@@ -56,6 +58,10 @@ pip install mpart
 ```
 
 For comprehensive details regarding the installation and further information about the library, please visit the [MParT documentation](https://measuretransport.github.io/MParT/).
+
+### uv
+
+`uv sync` will install the dependencies for the project. Currently only tested on Linux and WSL as `mpart` 
 
 ## Tutorials
 

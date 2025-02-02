@@ -14,7 +14,7 @@ from .utils import it_tools as it
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def surd(p: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
+def surd(hist: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
     """
     Decompose the mutual information between a target variable and a set
     of agent variables into three terms: Redundancy (I_R), Synergy (I_S),
@@ -28,160 +28,165 @@ def surd(p: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
     and unique information.
 
     Parameters:
-    - p (np.ndarray): A multi-dimensional array of the histogram, where the first dimension
+    - hist (np.ndarray): A multi-dimensional array of the histogram, where the first dimension
       represents the target variable, and subsequent dimensions represent agent variables.
 
     Returns:
-    - I_R (dict): Redundancies and unique information for each variable combination.
-    - I_S (dict): Synergies for each variable combination.
-    - MI (dict): Mutual information for each variable combination.
+    - rd (dict): Redundancies and unique information for each variable combination.
+    - sy (dict): Synergies for each variable combination.
+    - mi (dict): Mutual information for each variable combination.
     - info_leak (float): Estimation of the information leak
 
     Example: To understand the mutual information between target variable T and
     a combination of agent variables A1, A2, and A3, you can use:
-    I_R, I_S, MI, info_leak = surd(p)
+    rd, sy, mi, info_leak = surd(hist)
     """
 
     # Ensure no zero values in the probability distribution to avoid NaNs during log computations
-    p += 1e-14
+    hist += 1e-14
     # Normalize the distribution
-    p /= p.sum()
+    hist /= hist.sum()
 
     # Total number of dimensions (target + agents)
-    ntot = p.ndim
+    ntot = hist.ndim
     # Number of agent variables
     nvars = ntot - 1
     # Number of states for the target variable
-    nstates = p.shape[0]
-    inds = range(1, ntot)
+    nstates = hist.shape[0]
+    agent_indices = range(1, ntot)
 
     # Calculation of information leak
-    H = it.entropy_nvars(p, (0,))
-    Hc = it.cond_entropy(p, (0,), range(1, ntot))
-    info_leak = Hc / H
+    target_entropy = it.entropy_nvars(hist, (0,))
+    target_cond_entropy = it.cond_entropy(hist, (0,), range(1, ntot))
+    info_leak = target_cond_entropy / target_entropy
 
     # Compute the marginal distribution of the target variable
-    p_s = p.sum(axis=(*inds,), keepdims=True)
+    target_marginal_dist = hist.sum(axis=(*agent_indices,), keepdims=True)
 
     # Prepare for specific mutual information computation
-    combs, Is = [], {}
+    agent_combinations, specific_mi = [], {}
 
     # Iterate over all combinations of agent variables
-    for i in inds:
-        for j in list(combinations(inds, i)):
-            combs.append(j)
-            noj = tuple(set(inds) - set(j))
+    for num_agents in agent_indices:
+        for agent_combination in list(combinations(agent_indices, num_agents)):
+            agent_combinations.append(agent_combination)
+            excluded_agent_indices = tuple(set(agent_indices) - set(agent_combination))
 
             # Compute joint and conditional distributions for current combinations
-            p_a = p.sum(axis=(0, *noj), keepdims=True)
-            p_as = p.sum(axis=noj, keepdims=True)
+            p_a = hist.sum(axis=(0, *excluded_agent_indices), keepdims=True)
+            p_as = hist.sum(axis=excluded_agent_indices, keepdims=True)
 
-            p_a_s = p_as / p_s
+            p_a_s = p_as / target_marginal_dist
             p_s_a = p_as / p_a
 
             # Compute specific mutual information
-            Is[j] = (
-                (p_a_s * (it.safe_log(p_s_a) - it.safe_log(p_s))).sum(axis=j).ravel()
+            specific_mi[agent_combination] = (
+                (p_a_s * (it.safe_log(p_s_a) - it.safe_log(target_marginal_dist)))
+                .sum(axis=agent_combination)
+                .ravel()
             )
 
     # Compute mutual information for each combination of agent variables
-    MI = {k: (Is[k] * p_s.squeeze()).sum() for k in Is.keys()}
+    mi = {
+        k: (specific_mi[k] * target_marginal_dist.squeeze()).sum()
+        for k in specific_mi.keys()
+    }
 
     # Initialize redundancy and synergy terms
-    I_R = {cc: 0 for cc in combs}
-    I_S = {cc: 0 for cc in combs[nvars:]}
+    rd = {cc: 0 for cc in agent_combinations}
+    sy = {cc: 0 for cc in agent_combinations[nvars:]}
 
     # Process each value of the target variable
-    for t in range(nstates):
+    for state_index in range(nstates):
         # Extract specific mutual information for the current target value
-        I1 = np.array([ii[t] for ii in Is.values()])
+        state_specific_mi = np.array([ii[state_index] for ii in specific_mi.values()])
 
         # Sorting specific mutual information
-        i1 = np.argsort(I1)
-        lab = [combs[i_] for i_ in i1]
+        sorted_state_specific_mi = np.argsort(state_specific_mi)
+        lab = [agent_combinations[i] for i in sorted_state_specific_mi]
         lens = np.array([len(l) for l in lab])
 
         # Update specific mutual information based on existing maximum values
-        I1 = I1[i1]
+        state_specific_mi = state_specific_mi[sorted_state_specific_mi]
         for l in range(1, lens.max()):
             inds_l2 = np.where(lens == l + 1)[0]
-            Il1max = I1[lens == l].max()
-            inds_ = inds_l2[I1[inds_l2] < Il1max]
-            I1[inds_] = 0
+            Il1max = state_specific_mi[lens == l].max()
+            inds_ = inds_l2[state_specific_mi[inds_l2] < Il1max]
+            state_specific_mi[inds_] = 0
 
         # Recompute sorting of updated specific mutual information values
-        i1 = np.argsort(I1)
-        lab = [lab[i_] for i_ in i1]
+        sorted_state_specific_mi = np.argsort(state_specific_mi)
+        lab = [lab[i_] for i_ in sorted_state_specific_mi]
 
         # Compute differences in sorted specific mutual information values
-        Di = np.diff(I1[i1], prepend=0.0)
-        red_vars = list(inds)
+        sorted_mi_diffs = np.diff(
+            state_specific_mi[sorted_state_specific_mi], prepend=0.0
+        )
+        red_vars = list(agent_indices)
 
         # Distribute mutual information to redundancy and synergy terms
         for i_, ll in enumerate(lab):
-            info = Di[i_] * p_s.squeeze()[t]
+            info = sorted_mi_diffs[i_] * target_marginal_dist.squeeze()[state_index]
             if len(ll) == 1:
-                I_R[tuple(red_vars)] += info
+                rd[tuple(red_vars)] += info
                 red_vars.remove(ll[0])
             else:
-                I_S[ll] += info
+                sy[ll] += info
 
-    return I_R, I_S, MI, info_leak
+    return rd, sy, mi, info_leak
 
 
-def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
+def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, Dict]:
     """
-    Extension of surd to high-dimensional systems. It computes the
-    the decomposition of information up to a given number of maximum combination
-    between variables.
+    Extension of surd to high-dimensional systems. It computes the decomposition of
+    information up to a given number of maximum combination between variables.
 
     Parameters:
-    - Y (np.ndarray): A multi-dimensional array with the temporal evolution of the variables.
+    - data (np.ndarray): A multi-dimensional array with the temporal evolution of the variables.
     The first dimension represents the target variable, and subsequent dimensions represent
     agent variables.
     - nbins: Number of bins to discretize the histogram.
     - max_combs: maximum order of combinations for synergistic contributions
 
     Returns:
-    - I_R (dict): Redundancies and unique information for each variable combination.
-    - I_S (dict): Synergies for each variable combination.
-    - MI (dict): Mutual information for each variable combination.
+    - rd (dict): Redundancies and unique information for each variable combination.
+    - sy (dict): Synergies for each variable combination.
+    - mi (dict): Mutual information for each variable combination.
 
     Example: To understand the mutual information between target variable T and
     a combination of agent variables A1, A2, and A3, you can use:
-    I_R, I_S, MI = surd(p)
+    rd, sy, mi = surd_hd(data, nbins, max_combs)
     """
 
     # Total number of dimensions (target + agents)
-    ntot = Y.shape[0]
+    ntot = data.shape[0]
     # Number of agent variables
     nvars = ntot - 1
     # Limit the maximum number of combinations to max_combs
     max_inds = range(1, max_combs + 1)
-    tot_inds = range(1, ntot)
+    agent_indices = range(1, ntot)
 
     # Compute the marginal distribution of the target variable
-    p_target = it.safe_histogram(Y[0, :].T, nbins)
+    p_target = it.safe_histogram(data[0, :].T, nbins)
     p_target = p_target.reshape((nbins,) + (1,) * (ntot - 1))
 
     # Prepare for specific mutual information computation
-    combs, Is = [], {}
+    combs, specific_mi = [], {}
     red_combs = []
 
     # Iterate over all combinations of agent variables
-    for i in max_inds:
-        for j in list(combinations(tot_inds, i)):
-            combs.append(j)
-            # noj = tuple(set(inds) - set(j))
+    for num_agents in max_inds:
+        for agent_combination in list(combinations(agent_indices, num_agents)):
+            combs.append(agent_combination)
 
             shape = np.ones(ntot, dtype=int)
 
             # Compute joint distributions for current combinations
-            p_a = it.safe_histogram(Y[j, :].T, nbins)
-            for index in j:
+            p_a = it.safe_histogram(data[agent_combination, :].T, nbins)
+            for index in agent_combination:
                 shape[index] = nbins
             p_a = p_a.reshape(tuple(shape))
-            p_as = it.safe_histogram(Y[(0,) + j, :].T, nbins)
+            p_as = it.safe_histogram(data[(0,) + agent_combination, :].T, nbins)
             shape[0] = nbins
             p_as = p_as.reshape(tuple(shape))
 
@@ -190,26 +195,26 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
             p_s_a = p_as / p_a
 
             # Compute specific mutual information
-            Is[j] = (
+            specific_mi[agent_combination] = (
                 (p_a_s * (it.safe_log(p_s_a) - it.safe_log(p_target)))
-                .sum(axis=j)
+                .sum(axis=agent_combination)
                 .ravel()
             )
 
     # Compute mutual information for each combination of agent variables
-    MI = {k: (Is[k] * p_target.squeeze()).sum() for k in Is.keys()}
+    mi = {k: (specific_mi[k] * p_target.squeeze()).sum() for k in specific_mi.keys()}
 
     # Initialize redundancy and synergy terms
-    for i in tot_inds:
-        for j in list(combinations(tot_inds, i)):
-            red_combs.append(j)
-    I_R = {cc: 0 for cc in red_combs}
-    I_S = {cc: 0 for cc in combs[nvars:]}
+    for num_agents in agent_indices:
+        for agent_combination in list(combinations(agent_indices, num_agents)):
+            red_combs.append(agent_combination)
+    rd = {cc: 0 for cc in red_combs}
+    sy = {cc: 0 for cc in combs[nvars:]}
 
     # Process each value of the target variable
     for t in range(nbins):
         # Extract specific mutual information for the current target value
-        I1 = np.array([ii[t] for ii in Is.values()])
+        I1 = np.array([ii[t] for ii in specific_mi.values()])
 
         # Sorting specific mutual information
         i1 = np.argsort(I1)
@@ -230,25 +235,25 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
 
         # Compute differences in sorted specific mutual information values
         Di = np.diff(I1[i1], prepend=0.0)
-        red_vars = list(tot_inds)
+        red_vars = list(agent_indices)
 
         # Distribute mutual information to redundancy and synergy terms
         for i_, ll in enumerate(lab):
             info = Di[i_] * p_target.squeeze()[t]
             if len(ll) == 1:
-                I_R[tuple(red_vars)] += info
+                rd[tuple(red_vars)] += info
                 red_vars.remove(ll[0])
             else:
-                I_S[ll] += info
+                sy[ll] += info
 
-    return I_R, I_S, MI
+    return rd, sy, mi
 
 
-def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
+def plot(rd, sy, info_leak, axs, nvars, threshold=0):
     """
     This function computes and plots information flux for given data.
-    :param I_R: Data for redundant contribution
-    :param I_S: Data for synergistic contribution
+    :param rd: Data for redundant contribution
+    :param sy: Data for synergistic contribution
     :param axs: Axes for plotting
     :param colors: Colors for redundant, unique and synergistic contributions
     :param nvars: Number of variables
@@ -265,35 +270,38 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
 
     # Generate keys and labels
     # Redundant Contributions
-    I_R_keys = []
-    I_R_labels = []
+    rd_keys = []
+    rd_labels = []
     for r in range(nvars, 0, -1):
         for comb in combinations(range(1, nvars + 1), r):
             prefix = "U" if len(comb) == 1 else "R"
-            I_R_keys.append(prefix + "".join(map(str, comb)))
-            I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
+            rd_keys.append(prefix + "".join(map(str, comb)))
+            rd_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
 
     # Synergistic Contributions
-    I_S_keys = [
+    sy_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
         for comb in combinations(range(1, nvars + 1), r)
     ]
 
-    I_S_labels = [
+    sy_labels = [
         f"$\\mathrm{{S}}{{{''.join(map(str, comb))}}}$"
         for r in range(2, nvars + 1)
         for comb in combinations(range(1, nvars + 1), r)
     ]
 
-    label_keys, labels = I_R_keys + I_S_keys, I_R_labels + I_S_labels
+    label_keys, labels = (
+        rd_keys + sy_keys,
+        rd_labels + sy_labels,
+    )
 
     # Extracting and normalizing the values of information measures
     values = [
         (
-            I_R.get(tuple(map(int, key[1:])), 0)
+            rd.get(tuple(map(int, key[1:])), 0)
             if "U" in key or "R" in key
-            else I_S.get(tuple(map(int, key[1:])), 0)
+            else sy.get(tuple(map(int, key[1:])), 0)
         )
         for key in label_keys
     ]
@@ -337,11 +345,11 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
     return dict(zip(label_keys, values))
 
 
-def plot_nlabels(I_R, I_S, info_leak, axs, nvars, nlabels=-1):
+def plot_nlabels(rd, sy, info_leak, axs, nvars, nlabels=-1):
     """
     This function computes and plots information flux for given data.
-    :param I_R: Data for redundant contribution
-    :param I_S: Data for synergistic contribution
+    :param rd: Data for redundant contribution
+    :param sy: Data for synergistic contribution
     :param axs: Axes for plotting
     :param colors: Colors for redundant, unique and synergistic contributions
     :param nvars: Number of variables
@@ -358,36 +366,38 @@ def plot_nlabels(I_R, I_S, info_leak, axs, nvars, nlabels=-1):
 
     # Generate keys and labels
     # Redundant Contributions
-    I_R_keys = []
-    I_R_labels = []
+    rd_keys = []
+    rd_labels = []
     for r in range(nvars, 0, -1):
         for comb in combinations(range(1, nvars + 1), r):
             prefix = "U" if len(comb) == 1 else "R"
-            I_R_keys.append(prefix + "".join(map(str, comb)))
-
-            I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
+            rd_keys.append(prefix + "".join(map(str, comb)))
+            rd_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
 
     # Synergistic Contributions
-    I_S_keys = [
+    sy_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
         for comb in combinations(range(1, nvars + 1), r)
     ]
 
-    I_S_labels = [
+    sy_labels = [
         f"$\\mathrm{{S}}{{{''.join(map(str, comb))}}}$"
         for r in range(2, nvars + 1)
         for comb in combinations(range(1, nvars + 1), r)
     ]
 
-    label_keys, labels = I_R_keys + I_S_keys, I_R_labels + I_S_labels
+    label_keys, labels = (
+        rd_keys + sy_keys,
+        rd_labels + sy_labels,
+    )
 
     # Extracting and normalizing the values of information measures
     values = [
         (
-            I_R.get(tuple(map(int, key[1:])), 0)
+            rd.get(tuple(map(int, key[1:])), 0)
             if "U" in key or "R" in key
-            else I_S.get(tuple(map(int, key[1:])), 0)
+            else sy.get(tuple(map(int, key[1:])), 0)
         )
         for key in label_keys
     ]
@@ -461,7 +471,7 @@ def nice_print(r_, s_, mi_, leak_):
     print(f"    Information Leak: {leak_ * 100:5.2f}%")
 
 
-def run(X, nvars, nlag, nbins, axs):
+def run(data: np.ndarray, nvars: int, nlag: int, nbins: int, axs):
 
     information_flux = {}
 
@@ -469,18 +479,23 @@ def run(X, nvars, nlag, nbins, axs):
         print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
 
         # Organize data (0 target variable, 1: agent variables)
-        Y = np.vstack([X[i, nlag:], X[:, :-nlag]])
+        organised_data = np.vstack([data[i, nlag:], data[:, :-nlag]])
 
         # Run SURD
-        hist, _ = np.histogramdd(Y.T, nbins)
-        I_R, I_S, MI, info_leak = surd(hist)
+        hist, _ = np.histogramdd(organised_data.T, nbins)
+        rd, sy, mi, info_leak = surd(hist)
 
         # Print results
-        nice_print(I_R, I_S, MI, info_leak)
+        nice_print(rd, sy, mi, info_leak)
 
         # Plot SURD
         information_flux[i + 1] = plot(
-            I_R, I_S, info_leak, axs[i, :], nvars, threshold=-0.01
+            rd,
+            sy,
+            info_leak,
+            axs[i, :],
+            nvars,
+            threshold=-0.01,
         )
 
         # Plot formatting
@@ -505,15 +520,13 @@ def run(X, nvars, nlag, nbins, axs):
     for i in range(0, nvars - 1):
         axs[i, 0].set_xticklabels("")
 
-    return I_R, I_S, MI, info_leak
 
-
-def run_parallel(X, nvars, nlag, nbins, axs):
+def run_parallel(data, nvars, nlag, nbins, axs):
 
     information_flux = {}
-    Rd_results = pymp.shared.dict({})  # Dictionary to store redundant contributions
-    Sy_results = pymp.shared.dict({})  # Dictionary to store synergistic contributions
-    MI_results = pymp.shared.dict({})  # Dictionary to store mutual information results
+    rd_results = pymp.shared.dict({})  # Dictionary to store redundant contributions
+    sy_results = pymp.shared.dict({})  # Dictionary to store synergistic contributions
+    mi_results = pymp.shared.dict({})  # Dictionary to store mutual information results
     info_leak_results = pymp.shared.dict(
         {}
     )  # Dictionary to store information leak results
@@ -522,30 +535,30 @@ def run_parallel(X, nvars, nlag, nbins, axs):
         for i in par.range(nvars):
 
             # Organize data (0 target variable, 1: agent variables)
-            Y = np.vstack([X[i, nlag:], X[:, :-nlag]])
+            organised_data = np.vstack([data[i, nlag:], data[:, :-nlag]])
 
             # Run SURD
-            hist, _ = np.histogramdd(Y.T, nbins)
-            I_R, I_S, MI, info_leak = surd(hist)
+            hist, _ = np.histogramdd(organised_data.T, nbins)
+            rd, sy, mi, info_leak = surd(hist)
 
             # Print results
             print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
-            nice_print(I_R, I_S, MI, info_leak)
+            nice_print(rd, sy, mi, info_leak)
             print("\n")
 
             # Save the results
             (
-                Rd_results[i + 1],
-                Sy_results[i + 1],
-                MI_results[i + 1],
+                rd_results[i + 1],
+                sy_results[i + 1],
+                mi_results[i + 1],
                 info_leak_results[i + 1],
-            ) = (I_R, I_S, MI, info_leak)
+            ) = (rd, sy, mi, info_leak)
 
     for i in range(nvars):
         # Plot SURD
         information_flux[i + 1] = plot(
-            Rd_results[i + 1],
-            Sy_results[i + 1],
+            rd_results[i + 1],
+            sy_results[i + 1],
             info_leak_results[i + 1],
             axs[i, :],
             nvars,
@@ -572,8 +585,6 @@ def run_parallel(X, nvars, nlag, nbins, axs):
     # Show the results
     for i in range(0, nvars - 1):
         axs[i, 0].set_xticklabels("")
-
-    return I_R, I_S, MI, info_leak
 
 
 def plot_multiple_lags(I_R, I_S, info_leak, axs, n_vars_lag, n_lag, threshold=0):
