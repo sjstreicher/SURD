@@ -4,6 +4,7 @@ from itertools import combinations
 from typing import Dict, Tuple
 
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pymp
 from tqdm import tqdm
@@ -523,15 +524,15 @@ def run(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
         axs[i, 0].set_xticklabels("")
 
 
-def run_parallel(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
+def run_parallel(
+    data: np.ndarray, n_lag: int, n_bins: int, plot: bool = False
+) -> Tuple[Dict, Dict, Dict, Dict]:
 
-    information_flux = {}
-    rd_results = pymp.shared.dict({})  # Dictionary to store redundant contributions
-    sy_results = pymp.shared.dict({})  # Dictionary to store synergistic contributions
-    mi_results = pymp.shared.dict({})  # Dictionary to store mutual information results
-    info_leak_results = pymp.shared.dict(
-        {}
-    )  # Dictionary to store information leak results
+    # Initialize dictionaries to store results
+    rd_results = pymp.shared.dict({})  # Redundant contributions
+    sy_results = pymp.shared.dict({})  # Synergistic contributions
+    mi_results = pymp.shared.dict({})  # Mutual information
+    info_leak_results = pymp.shared.dict({})  # Information leak
 
     n_vars = data.shape[0]
 
@@ -558,37 +559,49 @@ def run_parallel(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
                 info_leak_results[i + 1],
             ) = (rd, sy, mi, info_leak)
 
-    for i in range(n_vars):
-        # Plot SURD
-        information_flux[i + 1] = plot(
-            rd_results[i + 1],
-            sy_results[i + 1],
-            info_leak_results[i + 1],
-            axs[i, :],
-            n_vars,
-            threshold=-0.01,
+    if plot:
+        # Prepare subplots
+        fig, axs = plt.subplots(
+            n_vars, 2, figsize=(9, 2.3 * n_vars), gridspec_kw={"width_ratios": [35, 1]}
         )
 
-        # Plot formatting
-        axs[i, 0].set_title(
-            f"${{\\Delta I}}_{{(\\cdot) \\rightarrow {i+1}}} / I \\left(Q_{i+1}^+ ; \\mathrm{{\\mathbf{{Q}}}} \\right)$",
-            pad=12,
-        )
-        axs[i, 1].set_title(
-            f"$\\frac{{{{\\Delta I}}_{{\\mathrm{{leak}} \\rightarrow {i+1}}}}}{{H \\left(Q_{i+1} \\right)}}$",
-            pad=20,
-        )
-        axs[i, 0].set_xticklabels(
-            axs[i, 0].get_xticklabels(),
-            fontsize=20,
-            rotation=60,
-            ha="right",
-            rotation_mode="anchor",
-        )
+        information_flux = {}
+        for i in range(n_vars):
+            # Plot SURD
+            information_flux[i + 1] = plot(
+                rd_results[i + 1],
+                sy_results[i + 1],
+                info_leak_results[i + 1],
+                axs[i, :],
+                n_vars,
+                threshold=-0.01,
+            )
 
-    # Show the results
-    for i in range(0, n_vars - 1):
-        axs[i, 0].set_xticklabels("")
+            # Plot formatting
+            axs[i, 0].set_title(
+                f"${{\\Delta I}}_{{(\\cdot) \\rightarrow {i+1}}} / I \\left(Q_{i+1}^+ ; \\mathrm{{\\mathbf{{Q}}}} \\right)$",
+                pad=12,
+            )
+            axs[i, 1].set_title(
+                f"$\\frac{{{{\\Delta I}}_{{\\mathrm{{leak}} \\rightarrow {i+1}}}}}{{H \\left(Q_{i+1} \\right)}}$",
+                pad=20,
+            )
+            axs[i, 0].set_xticklabels(
+                axs[i, 0].get_xticklabels(),
+                fontsize=20,
+                rotation=60,
+                ha="right",
+                rotation_mode="anchor",
+            )
+
+        # Show the results
+        for i in range(0, n_vars - 1):
+            axs[i, 0].set_xticklabels("")
+
+        fig.tight_layout(w_pad=-8, h_pad=0)
+        fig.show()
+
+    return rd_results, sy_results, mi_results, info_leak_results
 
 
 def plot_multiple_lags(I_R, I_S, info_leak, axs, n_vars_lag, n_lag, threshold=0):
