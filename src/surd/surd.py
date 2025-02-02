@@ -136,7 +136,7 @@ def surd(hist: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
     return rd, sy, mi, info_leak
 
 
-def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, Dict]:
+def surd_hd(data: np.ndarray, n_bins: int, max_combs: int) -> Tuple[Dict, Dict, Dict]:
     """
     Extension of surd to high-dimensional systems. It computes the decomposition of
     information up to a given number of maximum combination between variables.
@@ -145,7 +145,7 @@ def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, D
     - data (np.ndarray): A multi-dimensional array with the temporal evolution of the variables.
     The first dimension represents the target variable, and subsequent dimensions represent
     agent variables.
-    - nbins: Number of bins to discretize the histogram.
+    - n_bins: Number of bins to discretize the histogram.
     - max_combs: maximum order of combinations for synergistic contributions
 
     Returns:
@@ -155,7 +155,7 @@ def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, D
 
     Example: To understand the mutual information between target variable T and
     a combination of agent variables A1, A2, and A3, you can use:
-    rd, sy, mi = surd_hd(data, nbins, max_combs)
+    rd, sy, mi = surd_hd(data, n_bins, max_combs)
     """
 
     # Total number of dimensions (target + agents)
@@ -167,8 +167,8 @@ def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, D
     agent_indices = range(1, ntot)
 
     # Compute the marginal distribution of the target variable
-    p_target = it.safe_histogram(data[0, :].T, nbins)
-    p_target = p_target.reshape((nbins,) + (1,) * (ntot - 1))
+    p_target = it.safe_histogram(data[0, :].T, n_bins)
+    p_target = p_target.reshape((n_bins,) + (1,) * (ntot - 1))
 
     # Prepare for specific mutual information computation
     combs, specific_mi = [], {}
@@ -182,12 +182,12 @@ def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, D
             shape = np.ones(ntot, dtype=int)
 
             # Compute joint distributions for current combinations
-            p_a = it.safe_histogram(data[agent_combination, :].T, nbins)
+            p_a = it.safe_histogram(data[agent_combination, :].T, n_bins)
             for index in agent_combination:
-                shape[index] = nbins
+                shape[index] = n_bins
             p_a = p_a.reshape(tuple(shape))
-            p_as = it.safe_histogram(data[(0,) + agent_combination, :].T, nbins)
-            shape[0] = nbins
+            p_as = it.safe_histogram(data[(0,) + agent_combination, :].T, n_bins)
+            shape[0] = n_bins
             p_as = p_as.reshape(tuple(shape))
 
             # Compute conditional distributions for current combinations
@@ -212,7 +212,7 @@ def surd_hd(data: np.ndarray, nbins: int, max_combs: int) -> Tuple[Dict, Dict, D
     sy = {cc: 0 for cc in combs[nvars:]}
 
     # Process each value of the target variable
-    for t in range(nbins):
+    for t in range(n_bins):
         # Extract specific mutual information for the current target value
         I1 = np.array([ii[t] for ii in specific_mi.values()])
 
@@ -471,18 +471,20 @@ def nice_print(r_, s_, mi_, leak_):
     print(f"    Information Leak: {leak_ * 100:5.2f}%")
 
 
-def run(data: np.ndarray, nvars: int, nlag: int, nbins: int, axs):
+def run(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
+
+    n_vars = data.shape[0]
 
     information_flux = {}
 
-    for i in tqdm(range(nvars), desc="Processing variables"):
+    for i in tqdm(range(n_vars), desc="Processing variables"):
         print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
 
         # Organize data (0 target variable, 1: agent variables)
-        organised_data = np.vstack([data[i, nlag:], data[:, :-nlag]])
+        organised_data = np.vstack([data[i, n_lag:], data[:, :-n_lag]])
 
         # Run SURD
-        hist, _ = np.histogramdd(organised_data.T, nbins)
+        hist, _ = np.histogramdd(organised_data.T, n_bins)
         rd, sy, mi, info_leak = surd(hist)
 
         # Print results
@@ -494,7 +496,7 @@ def run(data: np.ndarray, nvars: int, nlag: int, nbins: int, axs):
             sy,
             info_leak,
             axs[i, :],
-            nvars,
+            n_vars,
             threshold=-0.01,
         )
 
@@ -517,11 +519,11 @@ def run(data: np.ndarray, nvars: int, nlag: int, nbins: int, axs):
         print("\n")
 
     # Show the results
-    for i in range(0, nvars - 1):
+    for i in range(0, n_vars - 1):
         axs[i, 0].set_xticklabels("")
 
 
-def run_parallel(data, nvars, nlag, nbins, axs):
+def run_parallel(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
 
     information_flux = {}
     rd_results = pymp.shared.dict({})  # Dictionary to store redundant contributions
@@ -531,14 +533,16 @@ def run_parallel(data, nvars, nlag, nbins, axs):
         {}
     )  # Dictionary to store information leak results
 
-    with pymp.Parallel(nvars) as par:
-        for i in par.range(nvars):
+    n_vars = data.shape[0]
+
+    with pymp.Parallel(n_vars) as par:
+        for i in par.range(n_vars):
 
             # Organize data (0 target variable, 1: agent variables)
-            organised_data = np.vstack([data[i, nlag:], data[:, :-nlag]])
+            organised_data = np.vstack([data[i, n_lag:], data[:, :-n_lag]])
 
             # Run SURD
-            hist, _ = np.histogramdd(organised_data.T, nbins)
+            hist, _ = np.histogramdd(organised_data.T, n_bins)
             rd, sy, mi, info_leak = surd(hist)
 
             # Print results
@@ -554,14 +558,14 @@ def run_parallel(data, nvars, nlag, nbins, axs):
                 info_leak_results[i + 1],
             ) = (rd, sy, mi, info_leak)
 
-    for i in range(nvars):
+    for i in range(n_vars):
         # Plot SURD
         information_flux[i + 1] = plot(
             rd_results[i + 1],
             sy_results[i + 1],
             info_leak_results[i + 1],
             axs[i, :],
-            nvars,
+            n_vars,
             threshold=-0.01,
         )
 
@@ -583,7 +587,7 @@ def run_parallel(data, nvars, nlag, nbins, axs):
         )
 
     # Show the results
-    for i in range(0, nvars - 1):
+    for i in range(0, n_vars - 1):
         axs[i, 0].set_xticklabels("")
 
 
