@@ -47,7 +47,7 @@ def synergistic_collider(N):
 
 def redundant_collider(N):
     q1, q2, q3 = np.zeros(N), np.zeros(N), np.zeros(N)
-    W1, W2, W3 = (
+    W1, W2, _ = (
         np.random.normal(0, 1, N),
         np.random.normal(0, 1, N),
         np.random.normal(0, 1, N),

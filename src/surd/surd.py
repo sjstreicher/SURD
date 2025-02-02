@@ -6,6 +6,7 @@ from typing import Dict, Tuple
 import matplotlib.colors as mcolors
 import numpy as np
 import pymp
+from tqdm import tqdm
 
 from .utils import it_tools as it
 
@@ -464,7 +465,7 @@ def run(X, nvars, nlag, nbins, axs):
 
     information_flux = {}
 
-    for i in range(nvars):
+    for i in tqdm(range(nvars), desc="Processing variables"):
         print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
 
         # Organize data (0 target variable, 1: agent variables)
@@ -691,7 +692,7 @@ def run_multiple_lags(X, nvars, nlag, nbins, max_combs, axs):
     "Run SURD causality for different lags (from lag 1 up to nlag)"
     information_flux = {}
 
-    for i in range(nvars):
+    for i in tqdm(range(nvars), desc="Processing variables"):
         print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
 
         # Organize data (0 target variable, 1: agent variables)
