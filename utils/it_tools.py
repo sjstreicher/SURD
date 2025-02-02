@@ -14,7 +14,7 @@ def myhistogram(x, nbins):
 def mylog(x):
     """
     Compute the logarithm in base 2 avoiding singularities.
-    
+
     Parameters:
     - x (np.array): Input data.
 
@@ -22,10 +22,10 @@ def mylog(x):
     - np.array: Logarithm in base 2 of the input.
     """
     valid_indices = (x != 0) & (~np.isnan(x)) & (~np.isinf(x))
-    
+
     log_values = np.zeros_like(x)
     log_values[valid_indices] = np.log2(x[valid_indices])
-    
+
     return log_values
 
 
@@ -106,7 +106,7 @@ def mutual_info(p, set1_indices, set2_indices):
 
 def cond_mutual_info(p, ind1, ind2, ind3):
     """
-    Compute the conditional mutual information between two sets of variables 
+    Compute the conditional mutual information between two sets of variables
     conditioned to a third set.
 
     Parameters:
@@ -123,7 +123,7 @@ def cond_mutual_info(p, ind1, ind2, ind3):
     """
     # Merge indices of ind2 and ind3
     combined_indices = tuple(set(ind2) | set(ind3))
-    
+
     # Compute conditional mutual information
     return cond_entropy(p, ind1, ind3) - cond_entropy(p, ind1, combined_indices)
 
@@ -143,24 +143,25 @@ def transfer_entropy(p, target_var):
     """
     num_vars = len(p.shape) - 1  # Excluding the future variable
     TE = np.zeros(num_vars)
-    
+
     for i in range(1, num_vars + 1):
         # The indices for the present variables
         present_indices = tuple(range(1, num_vars + 1))
-        
+
         # The indices for the present variables excluding the i-th variable
         # conditioning_indices = tuple([target_var] + [j for j in range(1, num_vars + 1) if j != i])
-        conditioning_indices = tuple([target_var] + [j for j in range(1, num_vars + 1) if j != i and j != target_var])
-        
+        conditioning_indices = tuple(
+            [target_var]
+            + [j for j in range(1, num_vars + 1) if j != i and j != target_var]
+        )
+
         # Conditional entropy of the future state of the target variable given its own past
         cond_ent_target_given_past = cond_entropy(p, (0,), conditioning_indices)
-        
+
         # Conditional entropy of the future state of the target variable given its own past and the ith input variable
         cond_ent_target_given_past_and_input = cond_entropy(p, (0,), present_indices)
-        
+
         # Transfer entropy calculation
-        TE[i-1] = cond_ent_target_given_past - cond_ent_target_given_past_and_input
-    
+        TE[i - 1] = cond_ent_target_given_past - cond_ent_target_given_past_and_input
+
     return TE
-
-
