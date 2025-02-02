@@ -67,7 +67,7 @@ def surd(p: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
 
     # Iterate over all combinations of agent variables
     for i in inds:
-        for j in list(icmb(inds, i)):
+        for j in list(combinations(inds, i)):
             combs.append(j)
             noj = tuple(set(inds) - set(j))
 
@@ -167,7 +167,7 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
 
     # Iterate over all combinations of agent variables
     for i in max_inds:
-        for j in list(icmb(tot_inds, i)):
+        for j in list(combinations(tot_inds, i)):
             combs.append(j)
             # noj = tuple(set(inds) - set(j))
 
@@ -194,7 +194,7 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
 
     # Initialize redundancy and synergy terms
     for i in tot_inds:
-        for j in list(icmb(tot_inds, i)):
+        for j in list(combinations(tot_inds, i)):
             red_combs.append(j)
     I_R = {cc: 0 for cc in red_combs}
     I_S = {cc: 0 for cc in combs[Nvars:]}
