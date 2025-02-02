@@ -3,6 +3,7 @@
 _A Python repository for decomposing causality into its synergistic, unique, and redundant components for complex and chaotic systems._
 
 ## Introduction
+
 SURD (Synergistic-Unique-Redundant Decomposition) is a causal inference method that measures the increments of information gained about future events based on the
 available information from past observations. It further decomposes the causal interactions into redundant, unique, and synergistic contributions according to their nature. The formulation is non-intrusive and requires only pairs of past and future events, facilitating its application in both computational and experimental
 investigations. SURD also identifies the amount of causality that remains unaccounted for due to unobserved variables. The approach can be used to detect
@@ -31,24 +32,33 @@ SURD is designed to operate efficiently on standard computing systems. However, 
 ## Getting started
 
 After cloning the repository, you can set up the environment needed to run the scripts successfully by following the instructions below. You can create an environment using `conda` with all the required packages by running:
+
 ```sh
 conda env create -f environment.yml
 ```
+
 This command creates a new conda environment and installs the packages as specified in the `environment.yml` file in about 50 seconds. After installing the dependencies, make sure to activate the newly created conda environment with:
+
 ```sh
 conda activate surd
 ```
+
 Should you wish to use the transport map for estimating probability density functions (refer to this [tutorial](https://github.com/MIT-Computational-Turbulence-Group/SURD/blob/main/examples/E07_transport_map.ipynb)), the `mpart` library is required. Installation can be executed via the following `conda` command:
+
 ```sh
 conda install -c conda-forge mpart
 ```
+
 For users operating on the `osx-arm64` platform, please note that the `mpart` package is not available on `conda-forge`. As an alternative, the library should be installed using `pip`:
+
 ```sh
 pip install mpart
 ```
+
 For comprehensive details regarding the installation and further information about the library, please visit the [MParT documentation](https://measuretransport.github.io/MParT/).
 
 ## Tutorials
+
 SURD has been applied in a large collection of scenarios that have proven challenging for causal inference and demonstrate its application in analyzing the energy cascade in isotropic turbulence. For examples, consult the documentation or see the Jupyter notebooks in the examples folder.
 
 ## Citation
@@ -72,5 +82,5 @@ doi={10.1038/s41467-024-53373-4}
 ```
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.

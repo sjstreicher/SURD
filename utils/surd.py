@@ -1,14 +1,13 @@
 import itertools
 import warnings
-from itertools import chain as ichain
-from itertools import combinations as icmb
+from itertools import combinations
 from typing import Dict, Tuple
 
-import it_tools as it
 import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 import numpy as np
 import pymp
+
+from . import it_tools as it
 
 # Suppress all UserWarnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -262,7 +261,7 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
     I_R_keys = []
     I_R_labels = []
     for r in range(nvars, 0, -1):
-        for comb in icmb(range(1, nvars + 1), r):
+        for comb in combinations(range(1, nvars + 1), r):
             prefix = "U" if len(comb) == 1 else "R"
             I_R_keys.append(prefix + "".join(map(str, comb)))
             I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
@@ -271,12 +270,13 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
     I_S_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
-        for comb in icmb(range(1, nvars + 1), r)
+        for comb in combinations(range(1, nvars + 1), r)
     ]
+
     I_S_labels = [
         f"$\\mathrm{{S}}{{{''.join(map(str, comb))}}}$"
         for r in range(2, nvars + 1)
-        for comb in icmb(range(1, nvars + 1), r)
+        for comb in combinations(range(1, nvars + 1), r)
     ]
 
     label_keys, labels = I_R_keys + I_S_keys, I_R_labels + I_S_labels
@@ -354,21 +354,23 @@ def plot_nlabels(I_R, I_S, info_leak, axs, nvars, nlabels=-1):
     I_R_keys = []
     I_R_labels = []
     for r in range(nvars, 0, -1):
-        for comb in icmb(range(1, nvars + 1), r):
+        for comb in combinations(range(1, nvars + 1), r):
             prefix = "U" if len(comb) == 1 else "R"
             I_R_keys.append(prefix + "".join(map(str, comb)))
+
             I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
 
     # Synergestic Contributions
     I_S_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
-        for comb in icmb(range(1, nvars + 1), r)
+        for comb in combinations(range(1, nvars + 1), r)
     ]
+
     I_S_labels = [
         f"$\\mathrm{{S}}{{{''.join(map(str, comb))}}}$"
         for r in range(2, nvars + 1)
-        for comb in icmb(range(1, nvars + 1), r)
+        for comb in combinations(range(1, nvars + 1), r)
     ]
 
     label_keys, labels = I_R_keys + I_S_keys, I_R_labels + I_S_labels
