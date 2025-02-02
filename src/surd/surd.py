@@ -47,16 +47,16 @@ def surd(p: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
     p /= p.sum()
 
     # Total number of dimensions (target + agents)
-    Ntot = p.ndim
+    ntot = p.ndim
     # Number of agent variables
-    Nvars = Ntot - 1
+    nvars = ntot - 1
     # Number of states for the target variable
-    Nt = p.shape[0]
-    inds = range(1, Ntot)
+    nstates = p.shape[0]
+    inds = range(1, ntot)
 
     # Calculation of information leak
     H = it.entropy_nvars(p, (0,))
-    Hc = it.cond_entropy(p, (0,), range(1, Ntot))
+    Hc = it.cond_entropy(p, (0,), range(1, ntot))
     info_leak = Hc / H
 
     # Compute the marginal distribution of the target variable
@@ -79,17 +79,19 @@ def surd(p: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
             p_s_a = p_as / p_a
 
             # Compute specific mutual information
-            Is[j] = (p_a_s * (it.mylog(p_s_a) - it.mylog(p_s))).sum(axis=j).ravel()
+            Is[j] = (
+                (p_a_s * (it.safe_log(p_s_a) - it.safe_log(p_s))).sum(axis=j).ravel()
+            )
 
     # Compute mutual information for each combination of agent variables
     MI = {k: (Is[k] * p_s.squeeze()).sum() for k in Is.keys()}
 
     # Initialize redundancy and synergy terms
     I_R = {cc: 0 for cc in combs}
-    I_S = {cc: 0 for cc in combs[Nvars:]}
+    I_S = {cc: 0 for cc in combs[nvars:]}
 
     # Process each value of the target variable
-    for t in range(Nt):
+    for t in range(nstates):
         # Extract specific mutual information for the current target value
         I1 = np.array([ii[t] for ii in Is.values()])
 
@@ -137,7 +139,7 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
     The first dimension represents the target variable, and subsequent dimensions represent
     agent variables.
     - nbins: Number of bins to discretize the histogram.
-    - max_combs: maximum order of combitations for synergistic contributions
+    - max_combs: maximum order of combinations for synergistic contributions
 
     Returns:
     - I_R (dict): Redundancies and unique information for each variable combination.
@@ -150,16 +152,16 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
     """
 
     # Total number of dimensions (target + agents)
-    Ntot = Y.shape[0]
+    ntot = Y.shape[0]
     # Number of agent variables
-    Nvars = Ntot - 1
+    nvars = ntot - 1
     # Limit the maximum number of combinations to max_combs
     max_inds = range(1, max_combs + 1)
-    tot_inds = range(1, Ntot)
+    tot_inds = range(1, ntot)
 
     # Compute the marginal distribution of the target variable
-    p_target = it.myhistogram(Y[0, :].T, nbins)
-    p_target = p_target.reshape((nbins,) + (1,) * (Ntot - 1))
+    p_target = it.safe_histogram(Y[0, :].T, nbins)
+    p_target = p_target.reshape((nbins,) + (1,) * (ntot - 1))
 
     # Prepare for specific mutual information computation
     combs, Is = [], {}
@@ -171,14 +173,14 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
             combs.append(j)
             # noj = tuple(set(inds) - set(j))
 
-            shape = np.ones(Ntot, dtype=int)
+            shape = np.ones(ntot, dtype=int)
 
             # Compute joint distributions for current combinations
-            p_a = it.myhistogram(Y[j, :].T, nbins)
+            p_a = it.safe_histogram(Y[j, :].T, nbins)
             for index in j:
                 shape[index] = nbins
             p_a = p_a.reshape(tuple(shape))
-            p_as = it.myhistogram(Y[(0,) + j, :].T, nbins)
+            p_as = it.safe_histogram(Y[(0,) + j, :].T, nbins)
             shape[0] = nbins
             p_as = p_as.reshape(tuple(shape))
 
@@ -187,7 +189,11 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
             p_s_a = p_as / p_a
 
             # Compute specific mutual information
-            Is[j] = (p_a_s * (it.mylog(p_s_a) - it.mylog(p_target))).sum(axis=j).ravel()
+            Is[j] = (
+                (p_a_s * (it.safe_log(p_s_a) - it.safe_log(p_target)))
+                .sum(axis=j)
+                .ravel()
+            )
 
     # Compute mutual information for each combination of agent variables
     MI = {k: (Is[k] * p_target.squeeze()).sum() for k in Is.keys()}
@@ -197,7 +203,7 @@ def surd_hd(Y: np.ndarray, nbins, max_combs) -> Tuple[Dict, Dict, Dict]:
         for j in list(combinations(tot_inds, i)):
             red_combs.append(j)
     I_R = {cc: 0 for cc in red_combs}
-    I_S = {cc: 0 for cc in combs[Nvars:]}
+    I_S = {cc: 0 for cc in combs[nvars:]}
 
     # Process each value of the target variable
     for t in range(nbins):
@@ -266,7 +272,7 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
             I_R_keys.append(prefix + "".join(map(str, comb)))
             I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
 
-    # Synergestic Contributions
+    # Synergistic Contributions
     I_S_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
@@ -291,7 +297,7 @@ def plot(I_R, I_S, info_leak, axs, nvars, threshold=0):
         for key in label_keys
     ]
     values /= sum(values)
-    max_value = max(values)
+    # max_value = max(values)
 
     # Filtering based on threshold
     labels = [label for value, label in zip(values, labels) if value >= threshold]
@@ -360,7 +366,7 @@ def plot_nlabels(I_R, I_S, info_leak, axs, nvars, nlabels=-1):
 
             I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(map(str, comb))}}}$")
 
-    # Synergestic Contributions
+    # Synergistic Contributions
     I_S_keys = [
         "S" + "".join(map(str, comb))
         for r in range(2, nvars + 1)
@@ -385,7 +391,7 @@ def plot_nlabels(I_R, I_S, info_leak, axs, nvars, nlabels=-1):
         for key in label_keys
     ]
     values /= sum(values)
-    max_value = max(values)
+    # max_value = max(values)
 
     # Filtering based on threshold
     top_n_indices = np.argsort(values)[-nlabels:]
@@ -447,7 +453,7 @@ def nice_print(r_, s_, mi_, leak_):
         if len(k_) == 1:
             print(f"        {str(k_):12s}: {v_:5.4f}")
 
-    print("    Synergystic (S):")
+    print("    Synergistic (S):")
     for k_, v_ in s_.items():
         print(f"        {str(k_):12s}: {v_:5.4f}")
 
@@ -610,7 +616,7 @@ def plot_multiple_lags(I_R, I_S, info_leak, axs, n_vars_lag, n_lag, threshold=0)
 
             I_R_labels.append(f"$\\mathrm{{{prefix}}}{{{''.join(new_comb_labels)}}}$")
 
-    # Synergestic Contributions
+    # Synergistic Contributions
     I_S_keys = []
     I_S_labels = []
     for r in range(
@@ -642,7 +648,7 @@ def plot_multiple_lags(I_R, I_S, info_leak, axs, n_vars_lag, n_lag, threshold=0)
         for key in label_keys
     ]
     values /= sum(values)
-    max_value = max(values)
+    # max_value = max(values)
 
     # Filtering based on threshold
     labels = [label for value, label in zip(values, labels) if value >= threshold]
@@ -660,7 +666,7 @@ def plot_multiple_lags(I_R, I_S, info_leak, axs, n_vars_lag, n_lag, threshold=0)
 
     # Plotting the bar graph of information measures
     axs[0].set_xticks(range(len(values)))
-    shift_labels = axs[0].set_xticklabels(
+    axs[0].set_xticklabels(
         labels, fontsize=15, rotation=60, ha="right", rotation_mode="anchor"
     )
     axs[0].set_box_aspect(1 / 5)
@@ -698,7 +704,7 @@ def run_multiple_lags(X, nvars, nlag, nbins, max_combs, axs):
         I_R, I_S, MI = surd_hd(Y, nbins, max_combs)
 
         # Calculate information leak
-        hist = it.myhistogram(Y[0, :].T, nbins)
+        hist = it.safe_histogram(Y[0, :].T, nbins)
         H = it.entropy_nvars(hist, (0,))
         info_leak = 1 - (sum(I_R.values()) + sum(I_S.values())) / H
 

@@ -1,10 +1,29 @@
 {
     "cSpell.words": [
         "bibtex",
+        "edgecolor",
+        "gridspec",
+        "histogramdd",
+        "inds",
+        "ipython",
+        "keepdims",
+        "mathbf",
+        "mathrm",
         "mcolors",
         "mpart",
+        "nbins",
+        "ninds",
+        "nlabels",
+        "nlag",
+        "nsamples",
+        "nstates",
+        "ntot",
+        "nvars",
         "pymp",
         "pypi",
+        "rightarrow",
+        "safelog",
+        "usetex",
         "venv"
     ]
 }

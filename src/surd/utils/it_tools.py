@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def myhistogram(x, nbins):
+def safe_histogram(x, nbins):
 
     hist, _ = np.histogramdd(x, nbins)
 
@@ -11,7 +11,7 @@ def myhistogram(x, nbins):
     return hist
 
 
-def mylog(x):
+def safe_log(x):
     """
     Compute the logarithm in base 2 avoiding singularities.
 
@@ -39,7 +39,7 @@ def entropy(p):
     Returns:
     - float: Entropy of the given distribution.
     """
-    return -np.sum(p * mylog(p))
+    return -np.sum(p * safe_log(p))
 
 
 def entropy_nvars(p, indices):
