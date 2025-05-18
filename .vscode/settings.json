@@ -1,6 +1,7 @@
 {
     "cSpell.words": [
         "bibtex",
+        "copyto",
         "edgecolor",
         "gridspec",
         "histogramdd",
@@ -12,6 +13,7 @@
         "mcolors",
         "mpart",
         "nbins",
+        "nbytes",
         "ninds",
         "nlabels",
         "nlag",

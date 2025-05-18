@@ -2,6 +2,7 @@ import itertools
 import sys
 import warnings
 from itertools import combinations
+from pathlib import Path
 from typing import Dict, Tuple
 
 import matplotlib.colors as mcolors
@@ -516,11 +517,68 @@ def nice_print(r_, s_, mi_, leak_):
     print(f"    Information Leak: {leak_ * 100:5.2f}%")
 
 
-def run(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
+def plot_results(results_dict: Dict, output_dir: str) -> None:
+
+    information_flux = {}
+
+    n_vars = len(results_dict)
+
+    # Prepare subplots
+    fig, axs = plt.subplots(
+        n_vars,
+        2,
+        figsize=(9, 2.3 * n_vars),
+        gridspec_kw={"width_ratios": [35, 1]},
+    )
+
+    for var_index, result in results_dict.items():
+
+        rd = result["rd"]
+        sy = result["sy"]
+        info_leak = result["info_leak"]
+
+        # Plot SURD
+        information_flux[var_index + 1] = plot(
+            rd,
+            sy,
+            info_leak,
+            axs[var_index, :],
+            n_vars,
+            threshold=-0.01,
+        )
+
+        # Plot formatting
+        axs[var_index, 0].set_title(
+            f"${{\\Delta I}}_{{(\\cdot) \\rightarrow {var_index+1}}} / I \\left(Q_{var_index+1}^+ ; \\mathrm{{\\mathbf{{Q}}}} \\right)$",
+            pad=12,
+        )
+        axs[var_index, 1].set_title(
+            f"$\\frac{{{{\\Delta I}}_{{\\mathrm{{leak}} \\rightarrow {var_index+1}}}}}{{H \\left(Q_{var_index+1} \\right)}}$",
+            pad=20,
+        )
+        axs[var_index, 0].set_xticklabels(
+            axs[var_index, 0].get_xticklabels(),
+            fontsize=20,
+            rotation=60,
+            ha="right",
+            rotation_mode="anchor",
+        )
+        print("\n")
+
+    # Show the results
+    for ax_index in range(0, n_vars - 1):
+        axs[ax_index, 0].set_xticklabels("")
+
+    fig.tight_layout(w_pad=-8, h_pad=0)
+    fig.savefig(Path(output_dir) / "surd_results.png")
+    # fig.show()
+
+
+def run(data: np.ndarray, n_lag: int, n_bins: int, do_print: bool = False) -> Dict:
 
     n_vars = data.shape[0]
 
-    information_flux = {}
+    results_dict = {}  # Initialize results_list
 
     for i in tqdm(range(n_vars), desc="Processing variables"):
         print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
@@ -532,44 +590,22 @@ def run(data: np.ndarray, n_lag: int, n_bins: int, axs) -> None:
         hist, _ = np.histogramdd(organised_data.T, n_bins)
         rd, sy, mi, info_leak = surd(hist)
 
+        results_dict[i] = {
+            "rd": rd,
+            "sy": sy,
+            "mi": mi,
+            "info_leak": info_leak,
+        }
+
         # Print results
-        nice_print(rd, sy, mi, info_leak)
+        if do_print:
+            nice_print(rd, sy, mi, info_leak)
 
-        # Plot SURD
-        information_flux[i + 1] = plot(
-            rd,
-            sy,
-            info_leak,
-            axs[i, :],
-            n_vars,
-            threshold=-0.01,
-        )
-
-        # Plot formatting
-        axs[i, 0].set_title(
-            f"${{\\Delta I}}_{{(\\cdot) \\rightarrow {i+1}}} / I \\left(Q_{i+1}^+ ; \\mathrm{{\\mathbf{{Q}}}} \\right)$",
-            pad=12,
-        )
-        axs[i, 1].set_title(
-            f"$\\frac{{{{\\Delta I}}_{{\\mathrm{{leak}} \\rightarrow {i+1}}}}}{{H \\left(Q_{i+1} \\right)}}$",
-            pad=20,
-        )
-        axs[i, 0].set_xticklabels(
-            axs[i, 0].get_xticklabels(),
-            fontsize=20,
-            rotation=60,
-            ha="right",
-            rotation_mode="anchor",
-        )
-        print("\n")
-
-    # Show the results
-    for i in range(0, n_vars - 1):
-        axs[i, 0].set_xticklabels("")
+    return results_dict
 
 
 def run_parallel(
-    data: np.ndarray, n_lag: int, n_bins: int, plot: bool = False
+    data: np.ndarray, n_lag: int, n_bins: int, do_plotting: bool = False
 ) -> Tuple[Dict, Dict, Dict, Dict]:
 
     n_vars = data.shape[0]
@@ -660,7 +696,7 @@ def run_parallel(
                     info_leak_results[i + 1],
                 ) = (rd_p, sy_p, mi_p, info_leak_p)
 
-    if plot:
+    if do_plotting:
         # Prepare subplots
         fig, axs = plt.subplots(
             n_vars, 2, figsize=(9, 2.3 * n_vars), gridspec_kw={"width_ratios": [35, 1]}
