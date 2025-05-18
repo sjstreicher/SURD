@@ -1,4 +1,5 @@
 import itertools
+import sys
 import warnings
 from itertools import combinations
 from typing import Dict, Tuple
@@ -6,13 +7,56 @@ from typing import Dict, Tuple
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-import pymp
 from tqdm import tqdm
 
 from .utils import it_tools as it
 
 # Suppress all UserWarnings
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+# Worker function for multiprocessing on Windows
+# Moved to top-level to avoid pickling issues on Windows
+def _worker_func_windows(args_tuple):
+    # Unpack arguments
+    (
+        var_idx,
+        shm_name,
+        data_shape,
+        data_dtype,
+        lag_val,
+        bins_val,
+        surd_func_ref,
+        nice_print_func_ref,
+    ) = args_tuple
+
+    existing_shm = None
+    try:
+        # Attach to the shared memory
+        # This import is needed here if _worker_func_windows is in a separate file
+        # or if not already imported in the main scope where Pool starts workers.
+        # For simplicity, let's assume multiprocessing.shared_memory is available.
+        from multiprocessing import shared_memory  # Ensure this is findable
+
+        existing_shm = shared_memory.SharedMemory(name=shm_name)
+        # Create a NumPy array from the shared memory buffer
+        data_arr = np.ndarray(data_shape, dtype=data_dtype, buffer=existing_shm.buf)
+
+        # Rest of the original logic
+        organised_data = np.vstack(
+            [data_arr[var_idx, lag_val:], data_arr[:, :-lag_val]]
+        )
+        hist, _ = np.histogramdd(organised_data.T, bins_val)
+        rd, sy, mi, info_leak = surd_func_ref(hist)
+
+        print(f"SURD CAUSALITY FOR SIGNAL {var_idx+1}")
+        nice_print_func_ref(rd, sy, mi, info_leak)
+        print("\n")
+
+        return var_idx + 1, rd, sy, mi, info_leak
+    finally:
+        if existing_shm:
+            existing_shm.close()  # Important to close in each worker
 
 
 def surd(hist: np.ndarray) -> Tuple[Dict, Dict, Dict, float]:
@@ -528,36 +572,93 @@ def run_parallel(
     data: np.ndarray, n_lag: int, n_bins: int, plot: bool = False
 ) -> Tuple[Dict, Dict, Dict, Dict]:
 
-    # Initialize dictionaries to store results
-    rd_results = pymp.shared.dict({})  # Redundant contributions
-    sy_results = pymp.shared.dict({})  # Synergistic contributions
-    mi_results = pymp.shared.dict({})  # Mutual information
-    info_leak_results = pymp.shared.dict({})  # Information leak
-
     n_vars = data.shape[0]
+    # Initialize as standard dicts first
+    rd_results: Dict = {}
+    sy_results: Dict = {}
+    mi_results: Dict = {}
+    info_leak_results: Dict = {}
 
-    with pymp.Parallel(n_vars) as par:
-        for i in par.range(n_vars):
+    if sys.platform.startswith("win32"):
+        import multiprocessing
+        from multiprocessing import shared_memory  # Import for shared memory
 
-            # Organize data (0 target variable, 1: agent variables)
-            organised_data = np.vstack([data[i, n_lag:], data[:, :-n_lag]])
+        shm = None
+        results_list = []  # Initialize results_list
 
-            # Run SURD
-            hist, _ = np.histogramdd(organised_data.T, n_bins)
-            rd, sy, mi, info_leak = surd(hist)
+        if n_vars > 0 and data.nbytes > 0:  # Ensure there's data to share
+            try:
+                # Create shared memory for the data array
+                shm = shared_memory.SharedMemory(create=True, size=data.nbytes)
+                # Create a NumPy array backed by shared memory to easily copy data
+                shared_data_array_view = np.ndarray(
+                    data.shape, dtype=data.dtype, buffer=shm.buf
+                )
+                np.copyto(
+                    shared_data_array_view, data
+                )  # Copy original data to shared memory
 
-            # Print results
-            print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
-            nice_print(rd, sy, mi, info_leak)
-            print("\n")
+                # Prepare arguments for the worker function
+                # Pass shared memory name, shape, and dtype instead of the whole data array
+                tasks_args = [
+                    (
+                        i,
+                        shm.name,
+                        data.shape,
+                        data.dtype,
+                        n_lag,
+                        n_bins,
+                        surd,
+                        nice_print,
+                    )
+                    for i in range(n_vars)
+                ]
 
-            # Save the results
-            (
-                rd_results[i + 1],
-                sy_results[i + 1],
-                mi_results[i + 1],
-                info_leak_results[i + 1],
-            ) = (rd, sy, mi, info_leak)
+                with multiprocessing.Pool() as pool:
+                    results_list = pool.map(_worker_func_windows, tasks_args)
+            finally:
+                if shm:
+                    shm.close()
+                    shm.unlink()  # Crucial: unlink the shared memory in the main process
+        elif n_vars == 0:  # Handle case with no variables
+            pass  # results_list remains empty, dicts remain empty
+
+        # Populate results from results_list (which might be empty)
+        for key, rd_val, sy_val, mi_val, leak_val in results_list:
+            rd_results[key] = rd_val
+            sy_results[key] = sy_val
+            mi_results[key] = mi_val
+            info_leak_results[key] = leak_val
+
+    else:  # For Linux and other OS (original pymp implementation)
+        import pymp
+
+        rd_results = pymp.shared.dict({})
+        sy_results = pymp.shared.dict({})
+        mi_results = pymp.shared.dict({})
+        info_leak_results = pymp.shared.dict({})
+
+        with pymp.Parallel(n_vars) as par:
+            for i in par.range(n_vars):
+
+                # Organize data (0 target variable, 1: agent variables)
+                organised_data = np.vstack([data[i, n_lag:], data[:, :-n_lag]])
+
+                # Run SURD
+                hist, _ = np.histogramdd(organised_data.T, n_bins)
+                rd_p, sy_p, mi_p, info_leak_p = surd(hist)
+
+                print(f"SURD CAUSALITY FOR SIGNAL {i+1}")
+                nice_print(rd_p, sy_p, mi_p, info_leak_p)
+                print("\n")
+
+                # Save the results (original tuple assignment pattern)
+                (
+                    rd_results[i + 1],
+                    sy_results[i + 1],
+                    mi_results[i + 1],
+                    info_leak_results[i + 1],
+                ) = (rd_p, sy_p, mi_p, info_leak_p)
 
     if plot:
         # Prepare subplots
@@ -594,7 +695,6 @@ def run_parallel(
                 rotation_mode="anchor",
             )
 
-        # Show the results
         for i in range(0, n_vars - 1):
             axs[i, 0].set_xticklabels("")
 
